@@ -71,48 +71,208 @@ end
 
 
 
-function y_partition_abs(area, amount)
+function y_partition_abs(area, amount::T) where T
     a = round(Int, amount)
+    x = area.value.x
+    y = area.value.y
     p = const_lift(area) do r
         (
-            SimpleRectangle{Int}(0, 0, r.w, a),
-            SimpleRectangle{Int}(0, a, r.w, r.h - a)
+            SimpleRectangle{Int}(x, y,     r.w, a),
+            SimpleRectangle{Int}(x, y + a, r.w, r.h - a)
         )
     end
     return map(first, p), map(last, p)
 end
-function x_partition_abs(area, amount)
+function y_partition_abs(area, amount::Array{T}) where T
+    partitions = Array{Signal{SimpleRectangle{Int}}}(length(amount)+1)
+    temp_area = area
+    adjust = 0
+    for x in 1:length(amount)
+        partitions[x], second_area = y_partition_abs(temp_area, amount[x]-adjust)
+        adjust = amount[x]
+        temp_area = second_area
+    end
+    partitions[end]=temp_area
+    return Tuple(partitions)
+end
+function x_partition_abs(area, amount::T) where T<:Real
     a = round(Int, amount)
+    x = area.value.x
+    y = area.value.y
     p = const_lift(area) do r
         (
-            SimpleRectangle{Int}(0, 0, a, r.h),
-            SimpleRectangle{Int}(a, 0, r.w - a, r.h)
+            SimpleRectangle{Int}(x,     y, a,       r.h),
+            SimpleRectangle{Int}(x + a, y, r.w - a, r.h)
         )
     end
     return map(first, p), map(last, p)
+end
+function x_partition_abs(area, amount::Array{T}) where T
+    partitions = Array{Signal{SimpleRectangle{Int}}}(length(amount)+1)
+    temp_area = area
+    adjust = 0
+    for x in 1:length(amount)
+        partitions[x], second_area = x_partition_abs(temp_area, amount[x]-adjust)
+        adjust = amount[x]
+        temp_area = second_area
+    end
+    partitions[end]=temp_area
+    return Tuple(partitions)
+end
+function y_partition(area, percent::T) where T<:Real
+    amount = percent / 100.0
+    x = area.value.x
+    y = area.value.y
+    p = const_lift(area) do r
+        (
+            SimpleRectangle{Int}(x, y,                          r.w, round(Int, r.h*amount)),
+            SimpleRectangle{Int}(x, y + round(Int, r.h*amount), r.w, round(Int, r.h*(1-amount)))
+        )
+    end
+    return map(first, p), map(last, p)
+end
+function y_partition(area, percent::Array{T}) where T<:Real
+    amount = percent / 100.0
+    partitions = Array{Signal{SimpleRectangle{Int}}}(length(amount)+1)
+    temp_area = area
+    adjust = 1.0
+    for x in 1:length(amount)
+        partitions[x], second_area = y_partition_abs(temp_area, amount[x]/adjust)
+        adjust = 1.0-amount[x]
+        temp_area = second_area
+    end
+    partitions[end]=temp_area
+    return Tuple(partitions)
+end
+function x_partition(area, percent::T) where T<:Real
+    amount = percent / 100.0
+    x = area.value.x
+    y = area.value.y
+    p = const_lift(area) do r
+        (
+            SimpleRectangle{Int}(x,                          y, round(Int, r.w*amount), r.h ),
+            SimpleRectangle{Int}(x + round(Int, r.w*amount), y, round(Int, r.w*(1-amount)), r.h)
+        )
+    end
+    return map(first, p), map(last, p)
+end
+function x_partition(area, percent::Array{T}) where T<:Real
+    amount = percent / 100.0
+    partitions = Array{Signal{SimpleRectangle{Int}}}(length(amount)+1)
+    temp_area = area
+    adjust = 1.0
+    for x in 1:length(amount)
+        partitions[x], second_area = x_partition_abs(temp_area, amount[x]/adjust)
+        adjust = 1.0-amount[x]
+        temp_area = second_area
+    end
+    partitions[end]=temp_area
+    return Tuple(partitions)
 end
 
-function y_partition(area, percent)
-    amount = percent / 100.0
-    p = const_lift(area) do r
-        (
-            SimpleRectangle{Int}(0, 0, r.w, round(Int, r.h*amount)),
-            SimpleRectangle{Int}(0, round(Int, r.h*amount), r.w, round(Int, r.h*(1-amount)))
-        )
+function x_partition_tile(area, count)
+    tiles = Array{Signal{SimpleRectangle{Int}}}(count)
+    temp_area = area
+    for x in count:-1:2
+        percent = 100.0/x
+        tiles[end-x+1], second_area = x_partition(temp_area, percent)
+        temp_area = second_area
     end
-    return map(first, p), map(last, p)
-end
-function x_partition(area, percent)
-    amount = percent / 100.0
-    p = const_lift(area) do r
-        (
-            SimpleRectangle{Int}(0, 0, round(Int, r.w*amount), r.h ),
-            SimpleRectangle{Int}(round(Int, r.w*amount), 0, round(Int, r.w*(1-amount)), r.h)
-        )
-    end
-    return map(first, p), map(last, p)
+    tiles[end] = temp_area
+    return Tuple(tiles)
 end
 
+function y_partition_tile(area, count)
+    tiles = Array{Signal{SimpleRectangle{Int}}}(count)
+    temp_area = area
+    for x in count:-1:2
+        percent = 100.0/x
+        tiles[end-x+1], second_area = y_partition(temp_area, percent)
+        temp_area = second_area
+    end
+    tiles[end] = temp_area
+    return Tuple(tiles)
+end
+
+function xy_partition_abs(area, amount)
+    y_partitions = Array{Any}(length(amount[2]+1))
+    x_partitions = x_partition_abs(area,amount[1])
+    for x in 1:length(x_partitions)
+        y_partitions[x] = y_partition_abs(x_partitions[x],amount[2])
+    end
+    return Tuple(y_partitions)
+end
+
+function xy_partition(area, percent)
+    y_partitions = Array{Any}(length(percent[2]+1))
+    x_partitions = x_partition_abs(area,percent[1])
+    for x in 1:length(x_partitions)
+        y_partitions[x] = y_partition_abs(x_partitions[x],percent[2])
+    end
+    return Tuple(y_partitions)
+end
+
+function xy_partition_tile(area, count)
+    y_partitions = Array{Any}(count[2])
+    x_partitions = x_partition_abs(area,count[1])
+    for x in 1:count[1]
+        y_partitions[x] = y_partition_abs(x_partitions[x],count[2])
+    end
+    return Tuple(y_partitions)
+end
+
+function create_partitions!(
+    part_struct::ScreenPartition,
+    window=current_screen(),
+    names=[],
+    ;kw_args...
+    )
+    method_symbol = part_struct.inputs[:method]
+    div_select, measure_select =
+        if method_symbol == :absolute
+            "_abs", "amount"
+        elseif method_symbol == :tile
+            "_tile", "count"
+        elseif method_symbol != :percent
+            #should contain a throw for an invalid method selection
+            "invalid", ""
+        else
+            "", "ratio"
+        end
+    axis_select = String(part_struct.inputs[:axis])
+    #@show window
+    #@show parse(axis_select*"_partition"*div_select*"(window.area,part_struct.inputs[:"*measure_select*"])")
+    # partition_shapes =
+    #     eval(parse(axis_select*"_partition"*div_select*
+    #     "(window.area,part_struct.inputs[:"*measure_select*"])"))
+    partition_shapes = x_partition(window.area,part_struct.inputs[:ratio]*100.0)
+    names_idx = 1
+    for x_partition in partition_shapes
+        if isa(x_partition, Tuple)
+            for y_partition in x_partition
+                name = if names_idx>length(names)
+                    names_idx
+                else
+                    names[name_idx]
+                end
+                part_struct.subscreens[name] =
+                    Screen(window, area=y_partition, kw_args)
+                names_idx+=1
+            end
+        else
+            name = if names_idx>length(names)
+                names_idx
+            else
+                names[name_idx]
+            end
+            @show x_partition
+            part_struct.subscreens[name] =
+                Screen(window, area=x_partition)
+            names_idx+=1
+        end
+    end
+    nothing
+end
 
 glboundingbox(mini, maxi) = AABB{Float32}(Vec3f0(mini), Vec3f0(maxi)-Vec3f0(mini))
 function default_boundingbox(main, model)

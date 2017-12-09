@@ -269,3 +269,41 @@ struct GLVisualizeShader <: AbstractLazyShader
         new(map(x-> assetpath("shader", x), paths), args)
     end
 end
+
+"""
+On initialization, `ScreenPartition` only contains the parameters to be used to create a set of screen partitions, but does not create the partitions. That is handled by `create_partitions!`.
+
+# Arguments
+- `method::Symbol=:percent`: The method used to determine partitions. Can be `:percent`, `:absolute`, or `:tile`.
+- `axis::Symbol=:x`: The axis or axes around which the partitions are created. Can be `:x`, `:y`, or `:xy`
+- `ratio::(Float64, see note below)=0.5`: If the `:percent` method is selected, controls the ratio of the original window allocated to the first new subscreen, with the remainder going to the second.
+- `amount::(Int,see note below)=round(Int,60mm)`: If the `:absolute` method is selected, controls the amount of space allocated to the first new subscreen.
+- `count::(Int, see note below)=2`: If the `:tile` method is selected, controls the amount of equally sized tiles created along an axis.
+
+Note on input types for `ratio`, `amount`, and `count`:
+Single values can only be given when `axis` is either `:x` or `:y`. For `percent` and `absolute`, two subscreens will be returned according to the rules of the method.
+When `axis` is `:x` or `:y`, `ratio` and `amount` can be an `{Array}`. This will create length(Array) + 1 subscreens, following either precentage or absolute distance break points. This option is not available when using `:tile`.
+When `axis` is `:xy`, `ratio`, `amount`, or `count` must at least be an `{Array}`. This will follow the previous logic for each single axis. For `:percent` and `:absolute`, this creates 4 custom subscreens. This is the only option when using `:tile`
+When `axis` is `:xy`, `ratio` and `amount` can be `{Array{Array}}`. This will follow the single axis logic for each axis, creating a custom grid of subscreens.
+"""
+# In the future, maybe allow different methods for different axes for axis = :xy?
+# For now, I think this is a good prototype.
+struct ScreenPartition
+    subscreens::Dict{Any, Screen}
+    inputs::Dict{Symbol, Any}
+    function ScreenPartition(
+        method = :percent,
+        axis = :x,
+        ratio = 0.5,
+        amount = round(Int, 60mm),
+        count = 2,
+        ;kw_args...
+        )
+        base_dict = Dict(
+            :method=>method,
+            :axis => axis,
+            :ratio => ratio)
+        subscreen=Dict{Symbol, Screen}()
+        new(subscreen, merge(base_dict, Dict{Symbol,Any}(kw_args)))
+    end
+end

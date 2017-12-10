@@ -270,6 +270,40 @@ struct GLVisualizeShader <: AbstractLazyShader
     end
 end
 
+abstract type PartitionParams end
+
+type NullPartitionParams <: PartitionParams end
+
+type PercentPartitionParams <: PartitionParams
+    value
+    function PercentPartitionParams(percent=50.0)
+        #may also want to include a check for sortedness
+        if any(i->(i>=100.0 || i<=0.0), percent)
+            throw(DomainError())
+        else
+            new(percent)
+        end
+    end
+end
+
+type AbsolutePartitionParams <: PartitionParams
+    value
+    function AbsolutePartitionParams(amount = round(Int, 60mm))
+        new(amount)
+    end
+end
+
+type TilePartitionParams <: PartitionParams
+    value::Int
+    function TilePartitionParams(count=2)
+        if count<=0
+            throw(DomainError())
+        else
+            new(count)
+        end
+    end
+end
+
 """
 On initialization, `ScreenPartition` only contains the parameters to be used to create a set of screen partitions, but does not create the partitions. That is handled by `create_partitions!`.
 
@@ -286,24 +320,25 @@ When `axis` is `:x` or `:y`, `ratio` and `amount` can be an `{Array}`. This will
 When `axis` is `:xy`, `ratio`, `amount`, or `count` must at least be an `{Array}`. This will follow the previous logic for each single axis. For `:percent` and `:absolute`, this creates 4 custom subscreens. This is the only option when using `:tile`
 When `axis` is `:xy`, `ratio` and `amount` can be `{Array{Array}}`. This will follow the single axis logic for each axis, creating a custom grid of subscreens.
 """
-# In the future, maybe allow different methods for different axes for axis = :xy?
-# For now, I think this is a good prototype.
+
 struct ScreenPartition
     subscreens::Dict{Any, Screen}
     inputs::Dict{Symbol, Any}
     function ScreenPartition(
-        method = :percent,
-        axis = :x,
-        ratio = 0.5,
-        amount = round(Int, 60mm),
-        count = 2,
-        ;kw_args...
+        x_params = PercentPartitionParams(50.0),
+        y_params = NullPartitionParams()
         )
+        partition_params = (x_params, y_params)
+        # if !(partition_params[1]<:XPartitionParams)
+        #     throw(TypeError(:ScreenPartition,
+        #                     "types.jl",
+        #                     XPartitionParam,
+        #                     typeof(partition_params)))
+        # end
         base_dict = Dict(
-            :method=>method,
-            :axis => axis,
-            :ratio => ratio)
-        subscreen=Dict{Symbol, Screen}()
-        new(subscreen, merge(base_dict, Dict{Symbol,Any}(kw_args)))
+            :x_params => partition_params[1],
+            :y_params => partition_params[2])
+        subscreen = Dict{Symbol, Screen}()
+        new(subscreen, base_dict)
     end
 end

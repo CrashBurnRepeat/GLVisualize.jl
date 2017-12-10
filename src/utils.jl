@@ -194,81 +194,83 @@ function y_partition_tile(area, count)
     return Tuple(tiles)
 end
 
-function xy_partition_abs(area, amount)
-    y_partitions = Array{Any}(length(amount[2]+1))
-    x_partitions = x_partition_abs(area,amount[1])
-    for x in 1:length(x_partitions)
-        y_partitions[x] = y_partition_abs(x_partitions[x],amount[2])
+create_x_partition_shapes(area, params::PercentPartitionParams) =
+    x_partition(area,params.value)
+
+create_x_partition_shapes(area, params::AbsolutePartitionParams) =
+    x_partition_abs(area,params.value)
+
+create_x_partition_shapes(area, params::TilePartitionParams) =
+    x_partition_tile(area,param.value)
+
+create_y_partition_shapes(area, params::PercentPartitionParams) =
+    y_partition(area,params.value)
+
+create_y_partition_shapes(area, params::AbsolutePartitionParams) =
+    y_partition_abs(area,params.value)
+
+create_y_partition_shapes(area, params::TilePartitionParams) =
+    y_partition_tile(area,param.value)
+
+function create_partition_shapes(area, partition_struct)
+    x_params = partition_struct.inputs[:x_params]
+    if !isa(x_params, NullPartitionParams)
+        x_partitions = create_x_partition_shapes(area,x_params)
+    else
+        x_partitions = Tuple([area]) #ensures that y logic works
     end
-    return Tuple(y_partitions)
+    y_params = partition_struct.inputs[:y_params]
+    if !isa(y_params, NullPartitionParams)
+        if isa(y_params, TilePartitionParams)
+            num_y_partitions = y_params.value
+        else
+            num_y_partitions = length(y_params.value)+1
+        end
+        y_partitions = Array{Any}(num_y_partitions)
+        for x in 1:length(x_partitions)
+            y_partitions[x] = create_y_partition_shapes(x_partitions[x],y_params)
+        end
+        return Tuple(y_partitions)
+    else
+        return x_partitions
+    end
 end
 
-function xy_partition(area, percent)
-    y_partitions = Array{Any}(length(percent[2]+1))
-    x_partitions = x_partition_abs(area,percent[1])
-    for x in 1:length(x_partitions)
-        y_partitions[x] = y_partition_abs(x_partitions[x],percent[2])
-    end
-    return Tuple(y_partitions)
-end
-
-function xy_partition_tile(area, count)
-    y_partitions = Array{Any}(count[2])
-    x_partitions = x_partition_abs(area,count[1])
-    for x in 1:count[1]
-        y_partitions[x] = y_partition_abs(x_partitions[x],count[2])
-    end
-    return Tuple(y_partitions)
-end
 
 function create_partitions!(
-    part_struct::ScreenPartition,
+    partition_struct::ScreenPartition,
     window=current_screen(),
     names=[],
-    ;kw_args...
+    ;screen_options=[]
     )
-    method_symbol = part_struct.inputs[:method]
-    div_select, measure_select =
-        if method_symbol == :absolute
-            "_abs", "amount"
-        elseif method_symbol == :tile
-            "_tile", "count"
-        elseif method_symbol != :percent
-            #should contain a throw for an invalid method selection
-            "invalid", ""
-        else
-            "", "ratio"
-        end
-    axis_select = String(part_struct.inputs[:axis])
-    #@show window
-    #@show parse(axis_select*"_partition"*div_select*"(window.area,part_struct.inputs[:"*measure_select*"])")
-    # partition_shapes =
-    #     eval(parse(axis_select*"_partition"*div_select*
-    #     "(window.area,part_struct.inputs[:"*measure_select*"])"))
-    partition_shapes = x_partition(window.area,part_struct.inputs[:ratio]*100.0)
-    names_idx = 1
+    partition_shapes = create_partition_shapes(window.area,partition_struct)
+    shape_idx = 1
+    x_length = length(partition_shapes)
+    y_length = isa(partition_shapes[1], Tuple) ?
+        length(partition_shapes[1]) : 1
+    num_shapes = x_length*y_length #assumes grid
+    if num_shapes>length(names)
+        names_temp = collect(1:num_shapes)
+        names_temp[1:length(names)] = names
+        names = names_temp
+    end
+    num_options = length(screen_options)
+    if num_shapes>num_options
+        options_temp = fill([],size(screen_options))
+        options_temp[1:length(screen_options)]=screen_options
+        screen_options = options_temp
+    end
     for x_partition in partition_shapes
         if isa(x_partition, Tuple)
             for y_partition in x_partition
-                name = if names_idx>length(names)
-                    names_idx
-                else
-                    names[name_idx]
-                end
-                part_struct.subscreens[name] =
-                    Screen(window, area=y_partition, kw_args)
-                names_idx+=1
+                partition_struct.subscreens[names[shape_idx]] =
+                    Screen(window, area=y_partition; screen_options[shape_idx]...)
+                shape_idx+=1
             end
         else
-            name = if names_idx>length(names)
-                names_idx
-            else
-                names[name_idx]
-            end
-            @show x_partition
-            part_struct.subscreens[name] =
-                Screen(window, area=x_partition)
-            names_idx+=1
+            partition_struct.subscreens[names[shape_idx]] =
+                Screen(window, area=x_partition; screen_options[shape_idx]...)
+            shape_idx+=1
         end
     end
     nothing

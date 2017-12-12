@@ -212,14 +212,12 @@ create_y_partition_shapes(area, params::AbsolutePartitionParams) =
 create_y_partition_shapes(area, params::TilePartitionParams) =
     y_partition_tile(area,param.value)
 
-function create_partition_shapes(area, partition_struct)
-    x_params = partition_struct.inputs[:x_params]
+function create_partition_shapes(area, x_params, y_params)
     if !isa(x_params, NullPartitionParams)
         x_partitions = create_x_partition_shapes(area,x_params)
     else
         x_partitions = Tuple([area]) #ensures that y logic works
     end
-    y_params = partition_struct.inputs[:y_params]
     if !isa(y_params, NullPartitionParams)
         if isa(y_params, TilePartitionParams)
             num_y_partitions = y_params.value
@@ -237,13 +235,19 @@ function create_partition_shapes(area, partition_struct)
 end
 
 
-function create_partitions!(
-    partition_struct::ScreenPartition,
+function create_partitions(
+    x_partition_params::P1,
+    y_partition_params::P2,
     window=current_screen(),
     names=[],
-    ;screen_options=[]
+    ;options=[]
+    ) where {P1<:PartitionParams, P2<:PartitionParams}
+    partition_shapes = create_partition_shapes(
+        window.area,
+        x_partition_params,
+        y_partition_params
     )
-    partition_shapes = create_partition_shapes(window.area,partition_struct)
+    subscreens = Dict()
     shape_idx = 1
     x_length = length(partition_shapes)
     y_length = isa(partition_shapes[1], Tuple) ?
@@ -254,26 +258,60 @@ function create_partitions!(
         names_temp[1:length(names)] = names
         names = names_temp
     end
-    num_options = length(screen_options)
+    num_options = length(options)
     if num_shapes>num_options
-        options_temp = fill([],size(screen_options))
-        options_temp[1:length(screen_options)]=screen_options
-        screen_options = options_temp
+        options_temp = fill([],size(options))
+        options_temp[1:length(options)]=screen_options
+        options = options_temp
     end
     for x_partition in partition_shapes
         if isa(x_partition, Tuple)
             for y_partition in x_partition
-                partition_struct.subscreens[names[shape_idx]] =
-                    Screen(window, area=y_partition; screen_options[shape_idx]...)
+                subscreens[names[shape_idx]] =
+                    Screen(window, area=y_partition; options[shape_idx]...)
                 shape_idx+=1
             end
         else
-            partition_struct.subscreens[names[shape_idx]] =
-                Screen(window, area=x_partition; screen_options[shape_idx]...)
+            subscreens[names[shape_idx]] =
+                Screen(window, area=x_partition; options[shape_idx]...)
             shape_idx+=1
         end
     end
-    nothing
+    return subscreens
+end
+
+function create_controls(control_params, window)
+    if isa(control_params, Array)
+        control_objs = ntuple(length(control_params)) do i
+            widget_dispatch(control_params[i],window)
+        end
+    else
+        (control_objs,) = widget_dispatch(control_params,window)
+    end
+    return control_objs
+end
+
+widget_dispatch(control_param::WidgetParams, window) =
+    widget(control_param.value, window; control_param.options...)
+widget_dispatch(control_param::LabeledSliderParams, window) =
+    labeled_slider(control_param.value, window; control_param.options...)
+widget_dispatch(control_param::ButtonParams, window) =
+    button(control_param.value, window; control_param.options...)
+
+function create_control_signals(control_objs, names)
+    signals = Dict()
+    for i in 1:length(control_objs)
+        signals[names[i]] = control_objs[i][2]
+    end
+    return signals
+end
+
+function create_control_renderable(control_objs,names)
+    renderable=Array{Pair}(length(control_objs))
+    for i in 1:length(renderable)
+        renderable[i] = names[i]=>control_objs[i][1]
+    end
+    return renderable
 end
 
 glboundingbox(mini, maxi) = AABB{Float32}(Vec3f0(mini), Vec3f0(maxi)-Vec3f0(mini))

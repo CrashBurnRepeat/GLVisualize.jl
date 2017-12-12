@@ -1,10 +1,11 @@
 using GLVisualize, GLAbstraction, Reactive, GeometryTypes, Colors, GLWindow
 import GLVisualize: slider, mm, button, labeled_slider
-import GLVisualize: ScreenPartition, create_partitions!
+import GLVisualize: ScreenPartition
 import GLVisualize: NullPartitionParams, AbsolutePartitionParams
 import GLVisualize: PercentPartitionParams, TilePartitionParams
+import GLVisualize: ControlPanel, WidgetParams, LabeledSliderParams, ButtonParams
 
-window = glscreen()
+window = glscreen(resolution = (1000,600))
 
 description = """
 Demonstrating a UI for exploring the Koch snowflake.
@@ -12,34 +13,23 @@ Demonstrating a UI for exploring the Koch snowflake.
 iconsize = 5mm
 textsize = 5mm
 
-partitions = ScreenPartition(AbsolutePartitionParams(),NullPartitionParams())
 custom_args1 = [(:color, RGBA{Float32}(0.0f0, 0.0f0, 0.0f0, 1f0)),
                 (:stroke, (1f0, RGBA{Float32}(0.13f0, 0.13f0, 0.13f0, 1f0)))]
 custom_args2 = [(:color, RGBA(0.0f0, 0.0f0, 0.0f0, 1f0))]
-create_partitions!(partitions,
-                window,[:controls,:main],
-                screen_options=[custom_args1, custom_args2])
+
+partitions = ScreenPartition(
+    AbsolutePartitionParams(13*iconsize),
+    NullPartitionParams(),
+    window,
+    [:controls,:main],
+    options = [custom_args1, custom_args2]
+)
 
 #Code for generating the controls
-angles = ntuple(4) do i
-    labeled_slider(0.0:1.0:360.0, partitions.subscreens[:controls], text_scale = textsize, icon_size = iconsize, knob_scale = 3mm)
-end
-
-iterations_v, iterations_s = labeled_slider(1:11, partitions.subscreens[:controls], text_scale = textsize, icon_size = iconsize, knob_scale = 3mm)
-
-cmap_v, cmap_s = widget(
-    map(RGBA{Float32}, colormap("Blues", 5)),
-    partitions.subscreens[:controls];
-    area = (12 * iconsize, iconsize/3),
-    knob_scale = 1.3mm,
-)
-
-thickness_v, thickness_s = widget(
-    Signal(0.4f0), partitions.subscreens[:controls],
-    text_scale = textsize,
-    range = 0f0:0.05f0:20f0
-)
-
+angles_range = 0.0:1.0:360.0
+iterations_range = 1:11
+colormap_range = map(RGBA{Float32}, colormap("Blues", 5))
+thickness_value = Signal(0.4f0)
 segments = Point2f0[
     (0.0, 0.0),
     (2 * iconsize, 0.0),
@@ -47,31 +37,64 @@ segments = Point2f0[
     (6 * iconsize, iconsize / -2),
     (7 * iconsize, 0.0)
 ]
-
-# we could restrict the movement of the points with the kw_arg clampto
-# But I don't really feel like restricting the user here ;)
-line_v, line_s = widget(segments, partitions.subscreens[:controls], knob_scale = 1.5mm)
-
-center_v, center_s = button("⛶", relative_scale = iconsize, partitions.subscreens[:controls])
-
-controls = Pair[
-    "angle 1" => angles[1][1],
-    "angle 2" => angles[2][1],
-    "angle 3" => angles[3][1],
-    "angle 4" => angles[4][1],
-    "iterations" => iterations_v,
-    "colormap" => cmap_v,
-    "thickness" => thickness_v,
-    "segment" => line_v,
-    "center cam" => center_v
+custom_slider_args = [
+    (:text_scale, textsize),
+    (:icon_size, iconsize),
+    (:knob_scale, 3mm)
 ]
+custom_colormap_args = [
+    (:area, (12 * iconsize, iconsize/3)),
+    (:knob_scale, 1.3mm)
+]
+custom_thickness_args = [
+    (:text_scale, textsize),
+    (:range, 0f0:0.05f0:20f0)
+]
+custom_segment_args = [
+    (:knob_scale, 1.5mm)
+]
+custom_button_args = [
+    (:relative_scale, iconsize)
+]
+names = [
+    "angle 1",
+    "angle 2",
+    "angle 3",
+    "angle 4",
+    "iterations",
+    "colormap",
+    "thickness",
+    "segment",
+    "center cam"
+]
+
+controls = ControlPanel(
+    [
+    map(i->(LabeledSliderParams(angles_range, options = custom_slider_args)),1:4)...,
+    LabeledSliderParams(iterations_range, options = custom_slider_args),
+    WidgetParams(colormap_range, options = custom_colormap_args),
+    WidgetParams(thickness_value, options = custom_thickness_args),
+    WidgetParams(segments, options = custom_segment_args),
+    ButtonParams("⛶", options = custom_button_args)
+    ],
+    partitions.subscreens[:controls],
+    names
+)
 
 # Add controls to subscreen
 _view(visualize(
-    controls,
+    controls.renderable,
     text_scale = textsize,
     width = 12iconsize
 ), partitions.subscreens[:controls], camera = :fixed_pixel)
+
+# Make local names for signals
+angle_s = map(i->(controls.signals[i]), names[1:4])
+iterations_s = controls.signals["iterations"]
+cmap_s = controls.signals["colormap"]
+thickness_s = controls.signals["thickness"]
+line_s = controls.signals["segment"]
+center_s = controls.signals["center cam"]
 
 # Code for generating the fractal
 function spin(dir, α, len)
@@ -143,7 +166,6 @@ v0 = to_anglelengths(Array{Tuple{Float32, Float32}}(4), value(line_s))
 
 angle_vec1 = foldp(to_anglelengths, v0, line_s)
 
-angle_s = map(last, angles)
 anglevec2 = foldp(Array{Tuple{Float32, Float32}}(4), angle_s...) do angles, s...
     for i=1:4
         angles[i] = s[i], 1.0
@@ -191,11 +213,8 @@ center!(cam, AABB(value(line_pos)))
 if !isdefined(:runtests)
     renderloop(window)
     # clean up signals
-    for (v, s) in angles
-        close(s, false)
-    end
-    close(center_s, false)
-    close(thickness_s, false)
-    close(iterations_s, false)
-    close(iterations_s, false)
+    map(i->close(controls.signals[i], false),names[1:4])
+    close(controls.signals["center cam"], false)
+    close(controls.signals["thickness"], false)
+    close(controls.signals["iterations"], false)
 end

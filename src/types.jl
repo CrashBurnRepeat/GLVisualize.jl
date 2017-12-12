@@ -304,29 +304,15 @@ type TilePartitionParams <: PartitionParams
     end
 end
 
-"""
-On initialization, `ScreenPartition` only contains the parameters to be used to create a set of screen partitions, but does not create the partitions. That is handled by `create_partitions!`.
-
-# Arguments
-- `method::Symbol=:percent`: The method used to determine partitions. Can be `:percent`, `:absolute`, or `:tile`.
-- `axis::Symbol=:x`: The axis or axes around which the partitions are created. Can be `:x`, `:y`, or `:xy`
-- `ratio::(Float64, see note below)=0.5`: If the `:percent` method is selected, controls the ratio of the original window allocated to the first new subscreen, with the remainder going to the second.
-- `amount::(Int,see note below)=round(Int,60mm)`: If the `:absolute` method is selected, controls the amount of space allocated to the first new subscreen.
-- `count::(Int, see note below)=2`: If the `:tile` method is selected, controls the amount of equally sized tiles created along an axis.
-
-Note on input types for `ratio`, `amount`, and `count`:
-Single values can only be given when `axis` is either `:x` or `:y`. For `percent` and `absolute`, two subscreens will be returned according to the rules of the method.
-When `axis` is `:x` or `:y`, `ratio` and `amount` can be an `{Array}`. This will create length(Array) + 1 subscreens, following either precentage or absolute distance break points. This option is not available when using `:tile`.
-When `axis` is `:xy`, `ratio`, `amount`, or `count` must at least be an `{Array}`. This will follow the previous logic for each single axis. For `:percent` and `:absolute`, this creates 4 custom subscreens. This is the only option when using `:tile`
-When `axis` is `:xy`, `ratio` and `amount` can be `{Array{Array}}`. This will follow the single axis logic for each axis, creating a custom grid of subscreens.
-"""
-
 struct ScreenPartition
     subscreens::Dict{Any, Screen}
     inputs::Dict{Symbol, Any}
     function ScreenPartition(
         x_params = PercentPartitionParams(50.0),
-        y_params = NullPartitionParams()
+        y_params = NullPartitionParams(),
+        window = current_screen(),
+        names = [];
+        options = []
         )
         partition_params = (x_params, y_params)
         # if !(partition_params[1]<:XPartitionParams)
@@ -338,7 +324,55 @@ struct ScreenPartition
         base_dict = Dict(
             :x_params => partition_params[1],
             :y_params => partition_params[2])
-        subscreen = Dict{Symbol, Screen}()
+        subscreen = create_partitions( #add extended names?
+            x_params,
+            y_params,
+            window,
+            names,
+            options=options
+        )
         new(subscreen, base_dict)
+    end
+end
+
+abstract type GUIControlParams end
+
+type WidgetParams<:GUIControlParams
+    value
+    options
+    function WidgetParams(value; options=[])
+        new(value, options)
+    end
+end
+
+type LabeledSliderParams<:GUIControlParams
+    value
+    options
+    function LabeledSliderParams(value; options=[])
+        new(value, options)
+    end
+end
+
+type ButtonParams<:GUIControlParams
+    value
+    options
+    function ButtonParams(value; options=[])
+        new(value, options)
+    end
+end
+
+type ControlPanel
+    signals
+    renderable
+    inputs
+    function ControlPanel(
+        control_params,
+        window,
+        names
+    )
+        control_objs = create_controls(control_params, window)
+        signals = create_control_signals(control_objs, names)
+        renderable = create_control_renderable(control_objs, names)
+        new(signals, renderable, control_params)
     end
 end

@@ -216,15 +216,10 @@ function create_partition_shapes(area, x_params, y_params)
     if !isa(x_params, NullPartitionParams)
         x_partitions = create_x_partition_shapes(area,x_params)
     else
-        x_partitions = Tuple([area]) #ensures that y logic works
+        x_partitions = [area] #ensures that y logic works
     end
     if !isa(y_params, NullPartitionParams)
-        if isa(y_params, TilePartitionParams)
-            num_y_partitions = y_params.value
-        else
-            num_y_partitions = length(y_params.value)+1
-        end
-        y_partitions = Array{Any}(num_y_partitions)
+        y_partitions = Array{Any}(length(x_partitions))
         for x in 1:length(x_partitions)
             y_partitions[x] = create_y_partition_shapes(x_partitions[x],y_params)
         end

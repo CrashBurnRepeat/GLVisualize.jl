@@ -5,7 +5,9 @@ import GLVisualize: NullPartitionParams, AbsolutePartitionParams
 import GLVisualize: PercentPartitionParams, TilePartitionParams
 import GLVisualize: ControlPanel, WidgetParams, LabeledSliderParams, ButtonParams
 
-window = glscreen(resolution = (1000,600))
+w, h = (1000, 700)
+
+window = glscreen(resolution = (w,h))
 
 description = """
 Demonstrating a UI for exploring the Koch snowflake.
@@ -21,7 +23,15 @@ partitions = ScreenPartition(
     AbsolutePartitionParams(13*iconsize),
     NullPartitionParams(),
     window,
-    [:controls,:main],
+    [:sidebar,:main],
+    options = [custom_args1, custom_args2]
+)
+
+sidebar_partitions = ScreenPartition(
+    NullPartitionParams(),
+    AbsolutePartitionParams(2h-13*iconsize), #height is doubled because of retina display issues
+    partitions.subscreens[:sidebar],
+    [:controls, :mini],
     options = [custom_args1, custom_args2]
 )
 
@@ -77,7 +87,7 @@ controls = ControlPanel(
     WidgetParams(segments, options = custom_segment_args),
     ButtonParams("⛶", options = custom_button_args)
     ],
-    partitions.subscreens[:controls],
+    sidebar_partitions.subscreens[:controls],
     names
 )
 
@@ -86,7 +96,7 @@ _view(visualize(
     controls.renderable,
     text_scale = textsize,
     width = 12iconsize
-), partitions.subscreens[:controls], camera = :fixed_pixel)
+), sidebar_partitions.subscreens[:controls], camera = :fixed_pixel)
 
 # Make local names for signals
 angle_s = map(i->(controls.signals[i]), names[1:4])
@@ -175,7 +185,7 @@ end
 anglevec = merge(angle_vec1, anglevec2)
 
 it1_points = map(anglevec) do angles
-    generate_fractal(angles, 1)[1] ./ 100f0
+    generate_fractal(angles, 1)[1] ./ 5f0
 end
 
 line_level = map(anglevec, iterations_s) do angles, iter
@@ -194,9 +204,12 @@ _view(visualize(
 ), partitions.subscreens[:main], camera = :orthographic_pixel)
 
 _view(visualize(
-    it1_points, :lines, model = translationmatrix(Vec3f0(20, 20, 0)),
-    thickness = 2f0, color = RGBA(1f0, 1f0, 1f0, 1f0)
-), partitions.subscreens[:main], camera = :fixed_pixel)
+    it1_points,
+    :lines,
+    model = translationmatrix(Vec3f0(13*iconsize/4, 13*iconsize/4, 0)),
+    thickness = 2f0,
+    color = RGBA(1f0, 1f0, 1f0, 1f0)
+), sidebar_partitions.subscreens[:mini], camera = :fixed_pixel)
 
 # Signal housekeeping and render
 const cam = partitions.subscreens[:main].cameras[:orthographic_pixel]

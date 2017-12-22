@@ -4,6 +4,7 @@ import GLVisualize: ScreenPartition
 import GLVisualize: NullPartitionParams, AbsolutePartitionParams
 import GLVisualize: PercentPartitionParams, TilePartitionParams
 import GLVisualize: ControlPanel, WidgetParams, LabeledSliderParams, ButtonParams
+import GLWindow: scaling_factor, nativewindow
 
 w, h = (1000, 700)
 
@@ -27,9 +28,11 @@ partitions = ScreenPartition(
     options = [custom_args1, custom_args2]
 )
 
+pixel_scaling = scaling_factor(nativewindow(window))
+
 sidebar_partitions = ScreenPartition(
     NullPartitionParams(),
-    AbsolutePartitionParams(2h-13*iconsize), #height is doubled because of retina display issues
+    AbsolutePartitionParams(pixel_scaling[1]*h-13*iconsize),
     partitions.subscreens[:sidebar],
     [:controls, :mini],
     options = [custom_args1, custom_args2]
